@@ -1,0 +1,11 @@
+---
+- hosts: all
+  gather_facts: no
+  vars:
+    debug_mode: true
+  roles:
+    - libvirt
+    - kerbernetes
+
+
+  

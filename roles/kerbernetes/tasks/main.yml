@@ -1,0 +1,5 @@
+---
+# tasks file for deploy-kvm-k8s
+- name: Example task in kerbernetes
+  debug:
+    msg: "This is an example task in kerbernetes"

@@ -1,0 +1,50 @@
+---
+# common to all vm
+- name: Get latest version for kubernetes
+  delegate_to: "localhost"
+  run_once: yes
+  shell: "curl -L -s https://dl.k8s.io/release/stable.txt| sed 's/\\.[^.]*$//'| sed 's/^\\(.....\\).*/\\1/'"
+  register: kubernetes_version_data
+
+- name: Set cri-o version 
+  set_fact:
+    # crio_version: "v1.30"
+    # kubernetes_version: "v1.30"
+    # crio_version: "{{ kubernetes_version_data.stdout }}"
+    kubernetes_version: "{{ kubernetes_version_data.stdout }}"
+
+- name: Create Kubernetes repository file
+  become: yes
+  ansible.builtin.template:
+    src: kubernetes.conf.j2
+    dest: /etc/yum.repos.d/kubernetes.repo
+
+- name:  Install kubectl required
+  become: yes
+  package:
+    name: kubectl 
+    state: present
+
+- name:  Install podman
+  become: yes
+  package:
+    name: 
+      - podman
+    state: present
+
+- name:  Install kubernetes
+  become: yes
+  package:
+    name: 
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+    disable_excludes: kubernetes
+
+- name: Enable and start kubelet
+  become: yes   
+  systemd:
+    name: kubelet
+    enabled: yes
+    state: started

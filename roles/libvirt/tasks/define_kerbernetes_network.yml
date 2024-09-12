@@ -1,0 +1,42 @@
+---
+- debug: msg="bridge_found = {{ bridge_found }}"
+- block:
+    - name: Write new default brigde
+      copy:
+        content: |
+          <network>
+            <name>default</name>
+            <forward mode="bridge"/>
+            <bridge name="br0"/>
+          </network>
+        dest: /tmp/default.xml  # Path where the file will be created
+
+    - name: Add new default bridge
+      become: yes
+      block: 
+        - name: Define bridge
+          shell: virsh net-define /tmp/default.xml
+          ignore_errors: true
+          register: define_results
+
+        - name: Start bridge
+          shell: virsh net-start default
+          ignore_errors: true
+          register: start_results
+
+        - name: Autostart bridge
+          shell: virsh net-autostart default
+          ignore_errors: true
+          register: autostart_results 
+
+        - debug: msg="{{ define_results }}"
+          when: debug_mode
+        - debug: msg="{{ start_results }}"
+          when: debug_mode
+        - debug: msg="{{ autostart_results }}"
+          when: debug_mode
+        # Include the error handling handlers
+        - include_tasks: ../handlers/define_handlers.yml
+          when: define_results.rc != 0 or autostart_results.rc != 0 or autostart_results  != 0
+
+  when: bridge_found

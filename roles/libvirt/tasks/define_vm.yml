@@ -1,0 +1,191 @@
+---
+- name: Extract the base IP address (excluding the last octet)
+  set_fact:
+    ip_base: "{{ ansible_host.split('.')[0:3] | join('.') }}"
+
+- name: Set host name
+  set_fact:
+    vm_name: "{{ inventory_hostname_short }}" # host name
+    static_ip: "{{ ansible_host }}"           # Use ansible_host for the static IP
+    netmask: "24"                             # Netmask in CIDR notation (e.g., 24 for 255.255.255.0)
+    gateway: "{{ ip_base }}.1"
+    dns_servers:
+      - "8.8.8.8"                             # World dns till dns defined
+      - "{{ ip_base }}.1"
+    default_interface: "enp1s0"
+
+# - debug: msg="{{ inventory_hostname_short }}"
+
+
+- name: Set Default
+  set_fact:
+    delegations: kvmdc01.morinsoft.ca
+
+# - name: Get list of vm
+#   delegate_to: "{{ delegations }}"
+#   become: yes
+#   run_once: yes
+#   shell: "/bin/virsh list --all --name"
+#   register: virsh_list
+
+- name: Get list of all VMs
+  delegate_to: "{{ delegations }}"
+  become: yes
+  shell: "/bin/virsh list --all --name"
+  register: virsh_list
+  changed_when: false
+- debug: msg="{{virsh_list.stdout_lines}}"
+
+- name: Check if VM exists
+  set_fact:
+    vm_exists: "{{ vm_name in virsh_list.stdout_lines }}"
+    
+- name: Start VM if it exists but is not running
+  block:
+    - name: Get VM state
+      delegate_to: "{{ delegations }}"
+      become: yes
+      shell: "/bin/virsh domstate {{ vm_name }}"
+      register: vm_state
+      changed_when: false
+
+    - name: Debug VM state
+      debug:
+        msg: "VM state is: {{ vm_state.stdout.strip() }}"
+
+    - name: Start VM if not running
+      delegate_to: "{{ delegations }}"
+      become: yes
+      when: (vm_state.stdout.strip() != "running")
+      command: "/bin/virsh start {{ vm_name }}"
+      register: start_result
+  when: vm_exists
+
+# - name: Wait for the VM to get an IP address
+#   delegate_to: "{{ delegations }}"
+#   run_once: yes
+#   wait_for:
+#     timeout: 120
+#   when: vm_exists
+  
+- name: Get list of vm
+  delegate_to: "{{ delegations }}"
+  become: yes
+  run_once: yes
+  shell: "/bin/virsh list --all|grep -v Id|awk '{print $2}'|grep -v ^$"
+  register: virsh_list  
+
+- debug: msg="{{ virsh_list }}"
+  when: debug_mode 
+
+- name: Clone template
+  become: yes
+  block:
+    - name: Clone cis 2 template
+      delegate_to: "{{ delegations }}"
+      shell: "virt-clone --original ks-templated --name {{ inventory_hostname_short }} --file /var/lib/libvirt/images/local/{{ inventory_hostname_short }}.qcow2"
+      register: virt_clone
+      until: virt_clone.rc == 0
+      retries: 3
+      delay: 15
+      when: inventory_hostname_short not in virsh_list.stdout_lines
+
+    - debug:
+        msg: "{{ virt_clone }}"
+      when: debug_mode
+
+    - name: Start vm
+      delegate_to: "{{ delegations }}"
+      shell: "virsh start {{ inventory_hostname_short }}"
+      register: virsh_start
+      when: inventory_hostname_short not in virsh_list.stdout_lines
+
+    - debug:
+        msg: "{{ virsh_start }}"
+      when: debug_mode
+
+    - debug:
+        msg: "clone {{ inventory_hostname_short }}"
+      when: inventory_hostname_short not in virsh_list.stdout_lines
+
+    - name: Wait for the VM to get an IP address
+      delegate_to: "{{ delegations }}"
+      run_once: yes
+      wait_for:
+        timeout: 120
+      when: inventory_hostname_short not in virsh_list.stdout_lines
+    # - debug: msg="{{ }}"
+    
+    - name: Extract IP address from virsh output
+      delegate_to: "{{ delegations }}"
+      shell: "virsh domifaddr {{ vm_name }} --source agent --interface {{ default_interface }} | grep -oP '(?<=ipv4\\s\\s\\s).*(?=\/)'"
+      register: vm_ip
+
+    - name: Display the IP address
+      debug:
+        msg: "The IP address of the VM {{ vm_name }} is {{ vm_ip.stdout }}"
+    
+    - name: Set the hostname
+      delegate_to: "{{ vm_ip.stdout.strip() }}"
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    - debug: msg="default_interface {{ default_interface }}"
+
+    - name: Get Device ID
+      delegate_to: "{{ vm_ip.stdout.strip() }}"
+      shell: "nmcli device status | grep ethernet|awk '{print $1}'|tr -d \"\\n\""
+      register: nmcli_check1
+      failed_when: false
+    
+    - name: Get Device name
+      delegate_to: "{{ vm_ip.stdout.strip() }}"
+      shell: "nmcli -t -f NAME connection show|grep -v lo|tr -d \"\\n\""
+      register: nmcli_check2
+      failed_when: false
+
+    - name: Debug output of network update task view
+      debug:
+        msg: "{{ nmcli_check2.stdout }} update {{ nmcli_check1.stdout }}"
+
+    - name: rename nic network connection with device id
+      delegate_to: "{{ vm_ip.stdout.strip() }}"
+      command: nmcli con mod "{{ nmcli_check2.stdout.strip() }}" connection.id "{{ nmcli_check1.stdout.strip() }}"
+      register: update_nic
+
+    - name: Update network connection with new IP
+      delegate_to: "{{ vm_ip.stdout.strip() }}"
+      command: nmcli con mod "{{ nmcli_check1.stdout.strip() }}" ipv4.addresses "{{ static_ip }}/{{ netmask }}" ipv4.gateway "{{ gateway }}" ipv4.dns "{{ dns_servers | join(' ') }}" ipv4.method manual
+      register: update_nic2
+      # when: update_nic.rc == 0
+    
+    - name: Debug output of network update task
+      debug:
+        msg: "{{ update_nic2 }}"
+      # when: nmcli_check.rc == 0 and update_nic is defined
+
+    - block:
+        - name: Reboot the system immediately
+          delegate_to: "{{ vm_ip.stdout.strip() }}"
+          shell: "sleep 2 && reboot"
+          async: 1
+          poll: 0 
+
+        - name: Wait for the VM to finish booting
+          delegate_to: "{{ delegations }}"
+          run_once: yes
+          wait_for:
+            timeout: 120
+      when: vm_ip.stdout.strip() != ansible_host
+      
+    - name: Extract IP address from virsh output
+      delegate_to: "{{ delegations }}"
+      shell: "virsh domifaddr {{ vm_name }} --source agent --interface {{ default_interface }} | grep -oP '(?<=ipv4\\s\\s\\s).*(?=\/)'"
+      register: vm_ip2
+
+    - name: Display the IP address
+      debug:
+        msg: "The IP address of the VM {{ vm_name }} is {{ vm_ip2.stdout }}"
+        
+  
+  

@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Define the directory to serve files from
+SERVE_DIR="{{ kvm_disk_path }}"
+PORT=8000
+
+# Check if the directory exists
+if [ ! -d "$SERVE_DIR" ]; then
+  echo "Directory $SERVE_DIR does not exist. Creating it..."
+  mkdir -p "$SERVE_DIR"
+fi
+
+# Check if the server is already running
+EXISTING_PID=$(ps aux | grep "[p]ython3 -m http.server $PORT" | awk '{print $2}')
+cd "$SERVE_DIR"
+pwd
+if [ -n "$EXISTING_PID" ]; then
+  echo "Python HTTP server is already running with PID: $EXISTING_PID"
+else
+  # Start the Python HTTP server
+  echo "Starting Python HTTP server in $SERVE_DIR on port $PORT"
+  nohup python3 -m http.server $PORT &
+
+  # Capture the PID of the last background process
+  PID=$!
+
+  # Notify the user
+  echo "Python HTTP server started on port $PORT serving directory $SERVE_DIR"
+  echo "Server PID: $PID"
+fi

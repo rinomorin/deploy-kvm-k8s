@@ -1,0 +1,41 @@
+---
+# - debug: msg="{{ bridge_found  }}"
+# tasks file for deploy-kvm-k8s
+# - name: Example task in libvirt
+#   debug:
+#     msg: "This is an example task in libvirt"
+- block:
+  - name: Call to remove all networks
+    include_tasks: tasks/remove_all_nets.yml
+
+  # - debug: msg="{{ bridge_found  }}"
+  - name: Call to new bridge networks
+    include_tasks: define_kerbernetes_network.yml
+    
+  - name: Set correct time zone
+    shell: timedatectl set-timezone America/Toronto
+    ignore_errors: true
+    register: timezone_results
+  - debug: msg="{{ timezone_results}}"
+    when: debug_mode
+
+  when: "'kvm' in group_names"
+  tags: kvm
+
+- name: Define basic VM template
+  include_tasks: define_vm.yml
+  when: "'kerbernets' in group_names"
+  tags: kerbernets
+
+- name: Set kurbernete VM template
+  include_tasks: define_ks8_vm.yml
+  when: "'kerbernets' in group_names"
+  tags: kerbernets
+
+- name: Set kurbernete cluster
+  include_tasks: define_ks8_cluster.yml
+  when: "'kerbernets' in group_names"
+  tags: kerbernets
+
+# - name: Create kubernet VMs
+  #   include_tasks: define_ks8_vm.yml

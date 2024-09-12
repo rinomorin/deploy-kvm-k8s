@@ -1,0 +1,3 @@
+---
+# vars file for libvirts deploy
+bridge_found: False

@@ -1,0 +1,18 @@
+---
+# - debug: msg="load_key_result handle {{load_key_result}}"
+- name: check key status
+  fail:
+    msg: "Unables to load key {{ key_path }} for {{ poolname }}"
+  when: load_key_result.rc != 0 and not (" 'Key already loaded' in load_key_result.stderr") 
+# Key already loaded
+# # - debug: msg="ket_path {{ key_path }}"
+# - name: Check zfs is presence
+#   fail:
+#     msg: "Unable to check zfs volume  {{ key_path }}: {{ zfs_volume.stderr }}"
+#   when: zfs_volume.rc !=0 and not ("{{ 'permission denied'in zfs_volume.stderr }}")
+
+- name: Check zfs is presence
+  fail:
+    msg: "Unable to create zfs volume  {{ key_path }}: {{ create_zfs_result.stderr }}"
+  when: create_zfs_result.rc !=0 and ("{{ 'permission denied'in create_zfs_result.stderr }}")
+

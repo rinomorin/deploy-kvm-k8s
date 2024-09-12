@@ -1,0 +1,27 @@
+---
+- debug: msg="isi_file {{iso_file}}"
+# - name: Check file presence
+#   fail:
+#     msg: "Unable to retrieve is info for {{ latest_file }}: {{ autostariso_filet_results.stderr }}"
+#   when:  iso_file.rc != 0 and ("{{ 'Permission denied' in local_folder.stderr }}")
+
+- block:
+  - name: Check iso file presence
+    fail:
+      msg: "Unable to retrieve is info for {{ latest_file }}: {{ iso_file.msg }}"
+    when:  ("{{ 'absent' in iso_file.state }}")
+  when:  iso_file.failed != True 
+
+- block:
+  - name: Check iso file presence
+    fail:
+      msg: "Unable to retrieve is info for {{ latest_file }}: {{ iso_file2.msg }}"
+    when:  ("{{ 'absent' in get_iso_file.state }}")
+  when:  get_iso_file.failed != True 
+
+# - block:
+#   - name: Check iso file presence
+#     fail:
+#       msg: "Unable to retrieve is web for {{ latest_file }}: {{ iso_file.msg }}"
+#   when:  get_iso_file.rc != 0
+  #  when: local_folder.failed != False or iso_file.rc != 0 or get_iso_file.rc != 0"

@@ -1,0 +1,29 @@
+---
+- block:
+    # - debug: msg="local_folder {{local_folder}}"
+    - name: Check folder presence
+      fail:
+        msg: "Unable to retrieve is info for {{ latest_file }}: {{ local_folder.msg }}"
+      when:  "{{ 'Permission denied' in local_folder.msg }}"
+  when:  local_folder.failed != False
+
+- block:
+  - name: Check iso file presence
+    fail:
+      msg: "Unable to retrieve is info for {{ latest_file }}: {{ iso_file.msg }}"
+    when:  ("{{ 'absent' in iso_file.state }}")
+  when:  iso_file.failed != True 
+
+- name: Check if HTTP server started
+  fail:
+    msg: "HTTP server failed to start {{ http_server.stderr }}"
+  when: http_server.ansible_job_id is undefined
+
+# - block:
+#   - name: Check iso file presence
+#     fail:
+#       msg: "Unable to retrieve is info for {{ latest_file }}: {{ iso_file.msg }}"
+#     when:  not ("{{ 'absent' in iso_file.state }}")
+#   when:  iso_file.failed != True 
+  # when:  get_iso_file.rc != 0
+  #  when: local_folder.failed != False or iso_file.rc != 0 or get_iso_file.rc != 0"

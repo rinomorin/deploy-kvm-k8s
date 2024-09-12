@@ -1,0 +1,11 @@
+---
+- name: Check for errors in netlist
+  fail:
+    msg: "Failed to list libvirt networks: {{ netlist_result.stderr }}"
+  when: netlist_result.rc != 0
+
+- name: Check for errors in removal
+  fail:
+    msg: "Failed to undefine libvirt network '{{ item.item }}': {{ item.stderr }}"
+  loop: "{{ remove_results.results }}"
+  when: item.rc != 0

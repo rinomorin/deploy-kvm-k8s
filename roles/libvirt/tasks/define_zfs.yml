@@ -1,0 +1,47 @@
+---
+- name: Load ZFS encryption key
+  become: yes
+  command: "zfs load-key -L file://{{ key_path}} {{ poolname }}"
+  ignore_errors: true
+  register: load_key_result
+# - debug: "load_key_result {{ load_key_result }}"
+
+
+# - name: Check if ZFS volume exists
+#   become: yes
+#   zfs:
+#     name: "{{ poolname }}/{{ share_name }}"
+#     state: present
+#   ignore_errors: true
+#   register: zfs_volume
+# - debug: "check zfs_volume {{zfs_volume}}"
+
+- name: Create ZFS volume if it doesn't exist
+  become: yes
+  command: >
+    zfs create -o encryption=on -o keysource=raw -0 file://{{ key_path }} -o mountpoint={{ mount_point }} -V {{ zfs_volume_size }} {{ poolname }}/{{ share_name }}
+  # when: zfs_volume_check.rc != 0 and load_key_result.rc == 0
+  register: create_zfs_result
+  ignore_errors: true
+  # when: zfs_volume.state != 'present'
+
+# - name: Load ZFS encryption key if needed
+#   command: zfs load-key -L prompt "{{ poolname }}/{{ share_name }}"
+#   args:
+#     executable: /bin/bash
+#   when: zfs_volume.changed  # Only load key if the volume was created
+
+# - name: Ensure mountpoint exists
+#   file:
+#     path: "{{mount_point}}"
+#     state: directory
+
+# - name: Set permissions on mountpoint
+#   file:
+#     path: "{{mount_point}}"
+#     owner: root
+#     group: root
+#     mode: '0755'
+- include_tasks: ../handlers/zfs_handlers.yml
+    when: load_key_result.rc !=0 or create_zfs_result.rc != 0
+  

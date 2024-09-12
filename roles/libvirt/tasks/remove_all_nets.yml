@@ -1,0 +1,57 @@
+---
+- name: remove all  networks
+  become: yes
+  block:
+    - name: List all libvirt networks
+      shell: virsh net-list --all --name
+      register: netlist_result
+      ignore_errors: true
+
+    - debug: msg="{{netlist_result}}"
+    - name: Remove all libvirt networks
+      block:
+        - name: net type
+          debug: msg="{{ item }}"
+          loop: "{{ netlist_result.stdout_lines }}"
+
+        - name: Check network type
+          shell: virsh net-dumpxml {{ item }}|grep -i forward|cut -d= -f2|sed 's/[^a-zA-Z0-9]//g'
+          register: nettype_result
+          ignore_errors: true
+          loop: "{{ netlist_result.stdout_lines }}"
+
+        - debug: msg="nettype {{ item }}"
+          loop: "{{ nettype_result.results }}"
+
+        - name: Check if "bridge" is in the output
+          set_fact:
+            bridge_found: "{{ 'bridge' in item.stdout }}"
+          loop: "{{ nettype_result.results }}"
+        - debug: msg="bridge_found {{ bridge_found }}"
+        - debug: msg="skipp replace"
+          when: bridge_found
+
+        - name: Replace if not bridge
+          block:
+            - name: Stop libvirt network '{{ item }}'
+              shell: virsh net-destroy {{ item }}
+              ignore_errors: true
+              loop: "{{ netlist_result.stdout_lines }}"
+              register: stop_results
+
+            - name: Remove libvirt network '{{ item }}'
+              shell: virsh net-undefine {{ item }}
+              ignore_errors: true
+              loop: "{{ netlist_result.stdout_lines }}"
+              register: remove_results
+
+            - debug: msg="{{ remove_results }}"
+              when: debug_mode
+            # Include the error handling handlers
+            - include_tasks: ../handlers/libvirt_handlers.yml
+              when: netlist_result.rc != 0 or (remove_results.skipped != true)
+          when: not bridge_found
+        
+    - name: Return the variable
+      debug:
+        var: bridge_found

@@ -1,0 +1,15 @@
+---
+- name: Check for errors in create Define bridge
+  fail:
+    msg: "Failed to create libvirt networks: {{ define_results.stderr }}"
+  when: define_results.rc != 0 and not ("'already exists' in define_results.stderr")
+
+- name: Check for errors in start bridge
+  fail:
+    msg: "Failed to create libvirt networks: {{ start_results.stderr }}"
+  when: start_results.rc != 0 and not ("'network is already active' in define_results.stderr")
+
+- name: Check for errors in autostart bridge
+  fail:
+    msg: "Failed to set autostart on bridge networks: {{ autostart_results.stderr }}"
+  when: autostart_results.rc != 0
